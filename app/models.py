@@ -122,6 +122,7 @@ class Node(Base):
         Uuid, ForeignKey("roadmaps.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    phase: Mapped[str | None] = mapped_column(String(255), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     time_estimate: Mapped[str | None] = mapped_column(String(100), nullable=True)
     completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

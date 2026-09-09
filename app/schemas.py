@@ -55,6 +55,7 @@ class NodeOut(BaseModel):
     id: UUID
     roadmap_id: UUID
     name: str
+    phase: str | None = None
     description: str | None = None
     time_estimate: str | None = None
     depends_on: list[UUID] = []
@@ -72,6 +73,7 @@ class NodeOut(BaseModel):
 
 class NodeCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
+    phase: str | None = Field(default=None, max_length=255)
     description: str | None = None
     time_estimate: str | None = Field(default=None, max_length=100)
     depends_on: list[UUID] = []
@@ -80,6 +82,7 @@ class NodeCreate(BaseModel):
 
 class NodeUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
+    phase: str | None = Field(default=None, max_length=255)
     description: str | None = None
     time_estimate: str | None = Field(default=None, max_length=100)
     depends_on: list[UUID] | None = None

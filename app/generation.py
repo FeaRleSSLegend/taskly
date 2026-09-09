@@ -327,11 +327,12 @@ def generate_phase_tasks(
 # --- Persisting the result ----------------------------------------------
 
 
-def _make_node(roadmap_id: UUID, task: dict, order: int) -> Node:
+def _make_node(roadmap_id: UUID, task: dict, order: int, phase: str | None = None) -> Node:
     estimate = task.get("time_estimate")
     return Node(
         roadmap_id=roadmap_id,
         name=str(task.get("name") or "Untitled task")[:255],
+        phase=str(phase)[:255] if phase else None,
         description=task.get("description"),
         time_estimate=str(estimate)[:100] if estimate else None,
         order=order,
@@ -344,14 +345,17 @@ def _persist_flat(db: Session, roadmap: Roadmap, tasks: list[dict]) -> None:
     db.flush()
 
 
-def _persist_sequential(db: Session, roadmap: Roadmap, phase_tasks: list[list[dict]]) -> None:
+def _persist_sequential(
+    db: Session, roadmap: Roadmap, phases: list[dict], phase_tasks: list[list[dict]]
+) -> None:
     """Create every node first, then wire the dependency edges between them."""
     created: list[list[Node]] = []
     order = 0
-    for tasks in phase_tasks:
+    for phase_index, tasks in enumerate(phase_tasks):
+        phase_name = phases[phase_index].get("name") if phase_index < len(phases) else None
         row: list[Node] = []
         for task in tasks:
-            node = _make_node(roadmap.id, task, order)
+            node = _make_node(roadmap.id, task, order, phase=phase_name)
             db.add(node)
             row.append(node)
             order += 1
@@ -479,7 +483,7 @@ def run_generation(roadmap_id: UUID) -> None:
                     previous = tasks
 
                 _clear_nodes(db, roadmap)
-                _persist_sequential(db, roadmap, phase_tasks)
+                _persist_sequential(db, roadmap, phases, phase_tasks)
 
             problems = validate_roadmap_graph(db, roadmap)
             if problems:

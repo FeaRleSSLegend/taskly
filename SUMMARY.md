@@ -1,13 +1,13 @@
-# AI Task Roadmap Generator — Backend
+# AI Task Roadmap Generator â€” Backend
 
 FastAPI + SQLAlchemy 2.0 + PostgreSQL. Managed with `uv`.
 
 ## What was implemented
 
 **Auth** (`app/routers/auth.py`, `app/security.py`)
-- `POST /auth/register` — email + password, returns the user object and an access token (201).
-- `POST /auth/login` — returns an access token.
-- `GET /auth/me` — current user profile.
+- `POST /auth/register` â€” email + password, returns the user object and an access token (201).
+- `POST /auth/login` â€” returns an access token.
+- `GET /auth/me` â€” current user profile.
 - JWT (HS256) with a 24h expiry and no refresh flow. Passwords hashed with the `bcrypt`
   library directly (`bcrypt.hashpw` / `bcrypt.checkpw`); passlib is not used.
 - Every route except register/login is guarded by a `get_current_user` dependency that
@@ -32,19 +32,19 @@ FastAPI + SQLAlchemy 2.0 + PostgreSQL. Managed with `uv`.
   a dangling reference, or a reference to a node in another roadmap.
 - Problem types: `cycle`, `self_reference`, `dangling_reference`, `foreign_reference`.
 
-**Dashboard** — `GET /dashboard`: every roadmap of the current user with title, status and
+**Dashboard** â€” `GET /dashboard`: every roadmap of the current user with title, status and
 progress percentage.
 
-**Ownership scoping** — all roadmap and node routes resolve through `get_owned_roadmap` /
+**Ownership scoping** â€” all roadmap and node routes resolve through `get_owned_roadmap` /
 `get_owned_node` (`app/deps.py`), which filter on `user_id`. Another user's roadmap is
 indistinguishable from a nonexistent one.
 
-**Data model** (`app/models.py`) — `users`, `roadmaps`, `nodes`, plus `node_dependencies`, a
+**Data model** (`app/models.py`) â€” `users`, `roadmaps`, `nodes`, plus `node_dependencies`, a
 real self-referential association table (`depends_on_node_id`, `dependent_node_id`) with
 foreign keys in both directions. It is not exposed as its own resource; every node response
 embeds `depends_on` as a flat list of node ids.
 
-**Migrations** — Alembic, wired to `Base.metadata` and to the app settings
+**Migrations** â€” Alembic, wired to `Base.metadata` and to the app settings
 (`migrations/env.py`). `migrations/versions/0001_initial_schema.py` creates the full schema.
 
 ## Roadmap generation
@@ -60,9 +60,9 @@ The flow, using the `groq` SDK with model `llama-3.3-70b-versatile`:
 1. **Classify** (status -> `generating_phases`). One call returning
    `{"type": "sequential" | "flat", "reasoning": ...}`. The classifier's answer overrides
    whatever `type` the client sent on create.
-2. **Flat path** � one call returning independent `{name, description, time_estimate}`
+2. **Flat path** — one call returning independent `{name, description, time_estimate}`
    objects. Nodes get `order` by list position and no dependencies. Status -> `done`.
-3. **Sequential path** � one call for 4-8 phases (name + one-line description only), then
+3. **Sequential path** — one call for 4-8 phases (name + one-line description only), then
    status -> `generating_tasks` and one call per phase for its atomic tasks. All nodes are
    created first, then the dependency edges are wired, then `validate_roadmap_graph` runs
    before the status becomes `done`.
@@ -103,7 +103,7 @@ and `GET /roadmaps/{id}/generation-status`). The exception is also logged with a
 The background task never raises, so it cannot die silently.
 
 **With no `GROQ_API_KEY` configured, `build_client()` returns `None` and generation is skipped**
-� the roadmap is created and simply stays in `pending` with no nodes. `POST /roadmaps` still
+— the roadmap is created and simply stays in `pending` with no nodes. `POST /roadmaps` still
 succeeds, so the rest of the API is usable before a key is in place. This is also what keeps
 the test suite off the network.
 
@@ -144,7 +144,7 @@ Interactive docs at http://127.0.0.1:8000/docs, health check at `/health`.
 uv run pytest
 ```
 
-**73 tests, all passing.** They run against an in-memory SQLite database created per test from
+**74 tests, all passing.** They run against an in-memory SQLite database created per test from
 `Base.metadata` (no Postgres or migrations needed), with `get_db` overridden by a fixture and
 `database.SessionLocal` repointed at the same engine so background tasks reach it too.
 
@@ -191,7 +191,7 @@ replacing an existing graph.
 - **PATCH bodies use `exclude_unset`**, so omitted fields are left alone.
 - **`POST /auth/logout` was not implemented.** The brief's endpoint list omits it, and with no
   token blocklist it would be a no-op; clients discard the token instead.
-- **Validation errors return a structured `detail`** — `{"message": ..., "problems": [...]}` —
+- **Validation errors return a structured `detail`** â€” `{"message": ..., "problems": [...]}` â€”
   so a client can point at the offending nodes rather than parse a sentence.
 - **Emails are normalised to lowercase** on register and login.
 - **Foreign keys are enforced on SQLite** (`PRAGMA foreign_keys=ON`) so test behaviour matches
@@ -211,3 +211,11 @@ replacing an existing graph.
   gitignored), the `roadmaps.error_message` column, and migration `0002`.
 - **Postgres left unverified by request.** No connection was attempted and `alembic upgrade head`
   was not run. Both migrations were reviewed by reading. Tests remain SQLite-only.
+
+**Pass 3**
+
+- **Phase grouping for roadmap generation.** Added a nullable `phase` column to the `Node` model (`app/models.py`) and created Alembic migration `0003_add_node_phase.py`.
+- **Sequential roadmap phase tagging.** In `app/generation.py`, carried the phase names generated during phase 1 into phase 2 task creation so each `Node` is tagged with its origin phase label. Flat roadmaps leave `phase` as `None`.
+- **Schema & Router updates.** Updated `NodeOut`, `NodeCreate`, and `NodeUpdate` schemas in `app/schemas.py` and node router in `app/routers/nodes.py` to include `phase`.
+- **Test suite & verification.** Fixed pre-existing Groq model test config assertion and added `test_phase_population_for_sequential_and_flat_roadmaps` verifying non-null phase values for sequential roadmaps and `None` for flat roadmaps. All 74 tests passing.
+

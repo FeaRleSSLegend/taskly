@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from app import generation
+from app.config import get_settings
 from app.generation import GenerationError, run_generation
 from tests.conftest import make_node
 
@@ -228,6 +229,37 @@ def test_sequential_generation_produces_a_valid_acyclic_graph(client, auth, fake
     assert report == {"roadmap_id": created["id"], "valid": True, "problems": []}
 
 
+def test_phase_population_for_sequential_and_flat_roadmaps(client, auth, fake_groq):
+    # Sequential roadmap: every node should have a non-null phase label matching generated phases.
+    fake_groq(SEQUENTIAL_RESPONSES)
+    seq_created = client.post(
+        "/roadmaps", json={"goal_text": "Learn to play the cello"}, headers=auth
+    ).json()
+    seq_detail = client.get(f"/roadmaps/{seq_created['id']}", headers=auth).json()
+    seq_nodes = seq_detail["nodes"]
+
+    assert len(seq_nodes) > 0
+    assert all(n["phase"] is not None for n in seq_nodes)
+    assert set(n["phase"] for n in seq_nodes) == {
+        "Fundamentals",
+        "Practice",
+        "Repertoire",
+        "Performance",
+    }
+
+    # Flat roadmap: every node should have phase set to None.
+    fake_groq(FLAT_RESPONSES)
+    flat_created = client.post(
+        "/roadmaps", json={"goal_text": "Saturday errands"}, headers=auth
+    ).json()
+    flat_detail = client.get(f"/roadmaps/{flat_created['id']}", headers=auth).json()
+    flat_nodes = flat_detail["nodes"]
+
+    assert len(flat_nodes) > 0
+    assert all(n["phase"] is None for n in flat_nodes)
+
+
+
 def test_a_task_with_no_stated_link_is_chained_to_the_previous_phase(client, auth, fake_groq):
     responses = dict(SEQUENTIAL_RESPONSES)
     responses["roadmap_phases"] = {
@@ -294,7 +326,7 @@ def test_every_call_uses_strict_json_schema_and_the_configured_model(client, aut
 
     assert groq.calls, "expected at least one Groq call"
     for call in groq.calls:
-        assert call["model"] == "llama-3.3-70b-versatile"
+        assert call["model"] == get_settings().groq_model
         assert call["strict"] is True
         schema = call["schema"]
         assert schema["additionalProperties"] is False

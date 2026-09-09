@@ -60,6 +60,7 @@ def create_node(
     node = Node(
         roadmap_id=roadmap.id,
         name=payload.name,
+        phase=payload.phase,
         description=payload.description,
         time_estimate=payload.time_estimate,
         order=order,

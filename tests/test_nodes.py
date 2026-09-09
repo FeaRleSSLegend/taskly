@@ -18,6 +18,7 @@ def test_create_node_returns_expected_shape(client, auth, roadmap):
         "id",
         "roadmap_id",
         "name",
+        "phase",
         "description",
         "time_estimate",
         "depends_on",
