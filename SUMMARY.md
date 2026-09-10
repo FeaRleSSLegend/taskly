@@ -144,7 +144,7 @@ Interactive docs at http://127.0.0.1:8000/docs, health check at `/health`.
 uv run pytest
 ```
 
-**74 tests, all passing.** They run against an in-memory SQLite database created per test from
+**80 tests, all passing.** They run against an in-memory SQLite database created per test from
 `Base.metadata` (no Postgres or migrations needed), with `get_db` overridden by a fixture and
 `database.SessionLocal` repointed at the same engine so background tasks reach it too.
 
@@ -218,4 +218,16 @@ replacing an existing graph.
 - **Sequential roadmap phase tagging.** In `app/generation.py`, carried the phase names generated during phase 1 into phase 2 task creation so each `Node` is tagged with its origin phase label. Flat roadmaps leave `phase` as `None`.
 - **Schema & Router updates.** Updated `NodeOut`, `NodeCreate`, and `NodeUpdate` schemas in `app/schemas.py` and node router in `app/routers/nodes.py` to include `phase`.
 - **Test suite & verification.** Fixed pre-existing Groq model test config assertion and added `test_phase_population_for_sequential_and_flat_roadmaps` verifying non-null phase values for sequential roadmaps and `None` for flat roadmaps. All 74 tests passing.
+
+**Pass 4**
+
+- **Streaks & Event-Driven Notifications.** Added `resend` dependency and configured `RESEND_API_KEY` setting in `app/config.py`, `.env`, and `.env.example`. Added `UserStreak`, `NotificationPreference`, and `Notification` models in `app/models.py` along with migration `0004_add_streaks_and_notifications.py`.
+- **Auto-provisioning on registration.** Updated `app/routers/auth.py` to auto-create default `UserStreak` and `NotificationPreference` rows on user registration.
+- **Streak calculation.** `complete_node` handler in `app/routers/nodes.py` calculates streaks based on UTC dates (same day = no-op, yesterday = increment streak & bump longest streak, older/null = reset to 1). Exposed via `GET /streak`.
+- **Event-Driven notifications (No scheduler / No cron).** Built `app/notifications.py` wrapping Resend email sending (logging and skipping if `RESEND_API_KEY` is not set or on send error without raising). Triggers:
+  - `roadmap_ready`: Fired synchronously when roadmap status becomes `done` in `app/generation.py`.
+  - `milestone`: Fired synchronously when progress crosses 25%, 50%, 75%, or 100% in node completion handlers without duplicating existing milestone alerts.
+- **Preferences & In-app delivery.** Added `GET /notifications/preferences`, `PATCH /notifications/preferences`, and `GET /notifications` (returning undelivered notifications and marking them `delivered=true`). Disabling `milestone_notifications` suppresses both in-app and email; disabling `email_enabled` suppresses only emails.
+- **Verification.** Confirmed no scheduler or cron dependency exists anywhere in the notification path. Added test suite in `tests/test_streaks_and_notifications.py`. All 80 tests pass.
+
 

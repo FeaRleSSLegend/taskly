@@ -3,7 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import User
+from app.models import NotificationPreference, User, UserStreak
 from app.schemas import RegisterResponse, Token, UserCreate, UserLogin, UserOut
 from app.security import create_access_token, get_current_user, hash_password, verify_password
 
@@ -19,6 +19,8 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
         )
 
     user = User(email=email, hashed_password=hash_password(payload.password))
+    user.streak = UserStreak()
+    user.preference = NotificationPreference()
     db.add(user)
     try:
         db.commit()

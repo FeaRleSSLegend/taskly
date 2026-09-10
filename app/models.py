@@ -1,10 +1,11 @@
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     Boolean,
     Column,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -31,6 +32,11 @@ class RoadmapStatus(str, enum.Enum):
     generating_tasks = "generating_tasks"
     done = "done"
     failed = "failed"
+
+
+class NotificationType(str, enum.Enum):
+    roadmap_ready = "roadmap_ready"
+    milestone = "milestone"
 
 
 def _utcnow() -> datetime:
@@ -74,6 +80,15 @@ class User(Base):
     )
 
     roadmaps: Mapped[list["Roadmap"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    streak: Mapped["UserStreak | None"] = relationship(
+        back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
+    preference: Mapped["NotificationPreference | None"] = relationship(
+        back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
+    notifications: Mapped[list["Notification"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
 
@@ -144,3 +159,52 @@ class Node(Base):
         secondaryjoin=lambda: Node.id == node_dependencies.c.dependent_node_id,
         back_populates="depends_on",
     )
+
+
+class UserStreak(Base):
+    __tablename__ = "user_streaks"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False, index=True
+    )
+    current_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    longest_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_active_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    user: Mapped["User"] = relationship(back_populates="streak")
+
+
+class NotificationPreference(Base):
+    __tablename__ = "notification_preferences"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False, index=True
+    )
+    email_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    milestone_notifications: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    user: Mapped["User"] = relationship(back_populates="preference")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    type: Mapped[NotificationType] = mapped_column(
+        _enum_col(NotificationType, "notification_type"), nullable=False
+    )
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    roadmap_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("roadmaps.id", ondelete="SET NULL"), nullable=True
+    )
+    delivered: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="notifications")

@@ -497,6 +497,12 @@ def run_generation(roadmap_id: UUID) -> None:
             roadmap.status = RoadmapStatus.done
             logger.info("Generated roadmap %s (%s)", roadmap_id, roadmap_type.value)
 
+            from app.models import NotificationType
+            from app.notifications import notify_user
+
+            message = f"Your roadmap '{roadmap.title}' is ready"
+            notify_user(db, roadmap.user, NotificationType.roadmap_ready, message, roadmap.id)
+
     except Exception as exc:
         logger.exception("Generation failed for roadmap %s", roadmap_id)
         _record_failure(roadmap_id, exc)

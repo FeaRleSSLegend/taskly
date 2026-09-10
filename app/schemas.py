@@ -1,10 +1,10 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from app.models import RoadmapStatus, RoadmapType
+from app.models import NotificationType, RoadmapStatus, RoadmapType
 
 # --- Auth ---------------------------------------------------------------
 
@@ -164,3 +164,40 @@ class ValidationReport(BaseModel):
     roadmap_id: UUID
     valid: bool
     problems: list[ValidationProblem] = []
+
+
+# --- Streaks & Notifications -------------------------------------------
+
+
+class UserStreakOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: UUID
+    current_streak: int
+    longest_streak: int
+    last_active_date: date | None = None
+
+
+class NotificationPreferenceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: UUID
+    email_enabled: bool
+    milestone_notifications: bool
+
+
+class NotificationPreferenceUpdate(BaseModel):
+    email_enabled: bool | None = None
+    milestone_notifications: bool | None = None
+
+
+class NotificationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: UUID
+    type: NotificationType
+    message: str
+    roadmap_id: UUID | None = None
+    delivered: bool
+    created_at: datetime

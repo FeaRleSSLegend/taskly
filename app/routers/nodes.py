@@ -1,10 +1,14 @@
+from datetime import datetime, timezone, timedelta
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_owned_node, get_owned_roadmap
-from app.models import Node, Roadmap
+from app.models import Node, Notification, NotificationType, Roadmap, UserStreak
+from app.notifications import notify_user
 from app.schemas import NodeCreate, NodeOut, NodeUpdate, ReorderRequest
 from app.validation import check_dangling_references, validate_roadmap_graph
 
@@ -142,17 +146,77 @@ def delete_node(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+def _update_streak(db: Session, user_id: UUID) -> None:
+    today = datetime.now(timezone.utc).date()
+    streak = db.query(UserStreak).filter(UserStreak.user_id == user_id).first()
+    if streak is None:
+        streak = UserStreak(
+            user_id=user_id, current_streak=1, longest_streak=1, last_active_date=today
+        )
+        db.add(streak)
+    else:
+        if streak.last_active_date == today:
+            pass
+        elif streak.last_active_date == today - timedelta(days=1):
+            streak.current_streak += 1
+            streak.last_active_date = today
+            if streak.current_streak > streak.longest_streak:
+                streak.longest_streak = streak.current_streak
+        else:
+            streak.current_streak = 1
+            streak.last_active_date = today
+            if streak.current_streak > streak.longest_streak:
+                streak.longest_streak = streak.current_streak
+
+
+def _check_milestones(db: Session, roadmap: Roadmap, before_pct: float, after_pct: float) -> None:
+    for threshold in [25, 50, 75, 100]:
+        if before_pct < threshold <= after_pct:
+            message = f"You're {threshold}% done with {roadmap.title}"
+            existing = (
+                db.query(Notification)
+                .filter(
+                    Notification.user_id == roadmap.user_id,
+                    Notification.roadmap_id == roadmap.id,
+                    Notification.type == NotificationType.milestone,
+                    Notification.message == message,
+                )
+                .first()
+            )
+            if not existing:
+                notify_user(db, roadmap.user, NotificationType.milestone, message, roadmap.id)
+
+
 @router.post("/{node_id}/complete", response_model=NodeOut)
-def complete_node(node: Node = Depends(get_owned_node), db: Session = Depends(get_db)):
+def complete_node(
+    node: Node = Depends(get_owned_node),
+    roadmap: Roadmap = Depends(get_owned_roadmap),
+    db: Session = Depends(get_db),
+):
+    before_pct = roadmap.progress_percentage
     node.completed = True
+    _update_streak(db, roadmap.user_id)
+    db.commit()
+    db.refresh(roadmap)
+    after_pct = roadmap.progress_percentage
+    _check_milestones(db, roadmap, before_pct, after_pct)
     db.commit()
     db.refresh(node)
     return node
 
 
 @router.post("/{node_id}/uncomplete", response_model=NodeOut)
-def uncomplete_node(node: Node = Depends(get_owned_node), db: Session = Depends(get_db)):
+def uncomplete_node(
+    node: Node = Depends(get_owned_node),
+    roadmap: Roadmap = Depends(get_owned_roadmap),
+    db: Session = Depends(get_db),
+):
+    before_pct = roadmap.progress_percentage
     node.completed = False
+    db.commit()
+    db.refresh(roadmap)
+    after_pct = roadmap.progress_percentage
+    _check_milestones(db, roadmap, before_pct, after_pct)
     db.commit()
     db.refresh(node)
     return node
