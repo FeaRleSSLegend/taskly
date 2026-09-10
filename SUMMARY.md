@@ -144,7 +144,7 @@ Interactive docs at http://127.0.0.1:8000/docs, health check at `/health`.
 uv run pytest
 ```
 
-**80 tests, all passing.** They run against an in-memory SQLite database created per test from
+**81 tests, all passing.** They run against an in-memory SQLite database created per test from
 `Base.metadata` (no Postgres or migrations needed), with `get_db` overridden by a fixture and
 `database.SessionLocal` repointed at the same engine so background tasks reach it too.
 
