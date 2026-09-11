@@ -379,9 +379,8 @@ def run_chat(
 
 
 def _save_message(db: Session, user_id: UUID, role: ChatRole, content: str) -> ChatMessage:
-    """Persist a single ChatMessage row and flush (not commit) so the caller
-    controls the transaction boundary."""
+    """Persist a single ChatMessage row and commit so the message is saved."""
     msg = ChatMessage(user_id=user_id, role=role, content=content)
     db.add(msg)
-    db.flush()
+    db.commit()
     return msg

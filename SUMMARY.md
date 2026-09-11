@@ -230,4 +230,23 @@ replacing an existing graph.
 - **Preferences & In-app delivery.** Added `GET /notifications/preferences`, `PATCH /notifications/preferences`, and `GET /notifications` (returning undelivered notifications and marking them `delivered=true`). Disabling `milestone_notifications` suppresses both in-app and email; disabling `email_enabled` suppresses only emails.
 - **Verification.** Confirmed no scheduler or cron dependency exists anywhere in the notification path. Added test suite in `tests/test_streaks_and_notifications.py`. All 80 tests pass.
 
+**Pass 5**
+
+- **Service Layer Extraction (`app/services.py`).** Extracted core business logic from route handlers into reusable Python functions so both REST endpoints and the AI chat agent share the exact same implementations:
+  - `list_roadmaps(db, user_id)`: retrieves user roadmaps and computes node progress.
+  - `get_roadmap_progress(db, user_id, roadmap_id)`: computes `total_nodes`, `completed_nodes`, and `progress_percentage`.
+  - `create_roadmap(db, user, goal_text, title=None, background_tasks=None, type=None)`: creates roadmap, handles title fallback, and enqueues background generation task.
+  - `complete_node_by_name(db, user, roadmap_id, node_name)`: fuzzy-matches nodes (exact case-insensitive -> prefix -> substring), completes match, and fires streak updates + milestone alerts. Returns candidate choices if match is ambiguous.
+  - `update_streak(db, user_id, today)` & `check_milestones(db, user, roadmap)`: moved from `app/routers/nodes.py` into services to eliminate duplication.
+  - Updated `app/routers/roadmaps.py` and `app/routers/nodes.py` to delegate to these services.
+- **Data Model & Migration.** Added `ChatRole` enum (`user`, `assistant`, `tool`) and `ChatMessage` model in `app/models.py` with foreign key to `users.id` (cascade delete), `role`, `content`, and `created_at`. Added `chat_messages` relationship on `User`. Created Alembic migration `migrations/versions/0005_add_chat_messages.py`.
+- **Nodi AI Chat Orchestration (`app/chat.py`).**
+  - Uses Groq tool calling (`tools=` parameter, looping while `finish_reason == "tool_calls"` up to `MAX_TOOL_ITERATIONS = 4`), completely decoupled from `app/generation.py` (which uses structured outputs via `response_format`).
+  - Four non-destructive tools exposed: `list_roadmaps`, `get_roadmap_progress`, `create_roadmap`, `complete_node`. No delete, edit, or regenerate capabilities exposed in chat.
+  - Multi-turn conversation context loaded from the last 20 messages in `ChatMessage`.
+  - Graceful degradation: if `GROQ_API_KEY` is not configured, returns a friendly status message with HTTP 200 rather than raising 500.
+  - Separate `build_chat_client()` constructor allows isolated testing and mocking without altering `app/generation.py`.
+- **Chat Endpoint & Schemas.** Added `POST /chat` route in `app/routers/chat.py` mounted in `app/main.py`. Request schema `ChatRequest(message: str)` and response schema `ChatResponse(reply: str, actions_taken: list[ActionTaken])` added to `app/schemas.py`.
+- **Tests & Verification.** Added `tests/test_chat.py` covering tool execution for listing, creating roadmaps, ambiguous node completion clarification, exact node completion with streak/milestone side effects, graceful degradation without API key, and multi-turn chat history persistence. All tests pass across the entire suite.
+
 
