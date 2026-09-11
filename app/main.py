@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, dashboard, nodes, notifications, roadmaps, streak
+from app.routers import auth, chat, dashboard, nodes, notifications, roadmaps, streak
 
 app = FastAPI(title="AI Task Roadmap Generator API", version="0.1.0")
 
@@ -19,6 +19,7 @@ app.include_router(nodes.router)
 app.include_router(dashboard.router)
 app.include_router(streak.router)
 app.include_router(notifications.router)
+app.include_router(chat.router)
 
 
 @app.get("/health", tags=["meta"])

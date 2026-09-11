@@ -201,3 +201,23 @@ class NotificationOut(BaseModel):
     roadmap_id: UUID | None = None
     delivered: bool
     created_at: datetime
+
+
+# --- Chat (Nodi) --------------------------------------------------------
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1)
+
+
+class ActionTaken(BaseModel):
+    """Summary of one tool call, returned to the frontend so it can render
+    something like '✓ Created roadmap: Learn Rust' alongside the chat bubble."""
+
+    tool: str
+    result: str  # natural-language one-liner
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    actions_taken: list[ActionTaken] = []

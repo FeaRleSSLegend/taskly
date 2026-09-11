@@ -39,6 +39,12 @@ class NotificationType(str, enum.Enum):
     milestone = "milestone"
 
 
+class ChatRole(str, enum.Enum):
+    user = "user"
+    assistant = "assistant"
+    tool = "tool"
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -89,6 +95,9 @@ class User(Base):
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
     notifications: Mapped[list["Notification"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    chat_messages: Mapped[list["ChatMessage"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
 
@@ -208,3 +217,21 @@ class Notification(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="notifications")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[ChatRole] = mapped_column(
+        _enum_col(ChatRole, "chat_role"), nullable=False
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="chat_messages")

@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, BackgroundTasks, Depends, Response, status
 from sqlalchemy.orm import Session
 
@@ -15,18 +17,10 @@ from app.schemas import (
     ValidationReport,
 )
 from app.security import get_current_user
+from app.services import create_roadmap as svc_create_roadmap
 from app.validation import validate_roadmap_graph
 
 router = APIRouter(prefix="/roadmaps", tags=["roadmaps"])
-
-TITLE_MAX = 255
-
-
-def _derive_title(goal_text: str) -> str:
-    title = " ".join(goal_text.strip().split())
-    if len(title) > 80:
-        title = title[:77].rstrip() + "..."
-    return title[:TITLE_MAX]
 
 
 @router.post("", response_model=RoadmapDetail, status_code=status.HTTP_201_CREATED)
@@ -36,33 +30,29 @@ def create_roadmap(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    roadmap = Roadmap(
-        user_id=current_user.id,
-        title=payload.title or _derive_title(payload.goal_text),
-        goal_text=payload.goal_text,
-        type=payload.type,
-        status=RoadmapStatus.pending,
+    result = svc_create_roadmap(
+        db,
+        current_user.id,
+        background_tasks,
+        payload.goal_text,
+        payload.title,
+        payload.type,
     )
-    db.add(roadmap)
-    db.commit()
-    db.refresh(roadmap)
-    # Committed as `pending` first, so the background task always finds the row.
-    # The response goes out before generation runs; clients poll
-    # /roadmaps/{id}/generation-status from here.
-    enqueue_generation(background_tasks, roadmap)
-    return roadmap
+    # Re-fetch as a full ORM object so RoadmapDetail can serialise it.
+    return db.query(Roadmap).filter(Roadmap.id == uuid.UUID(result["id"])).first()
 
 
 @router.get("", response_model=list[RoadmapSummary])
 def list_roadmaps(
     db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    return (
+    roadmaps = (
         db.query(Roadmap)
         .filter(Roadmap.user_id == current_user.id)
         .order_by(Roadmap.created_at.desc())
         .all()
     )
+    return roadmaps
 
 
 @router.get("/{roadmap_id}", response_model=RoadmapDetail)
@@ -121,7 +111,11 @@ def generation_status(roadmap: Roadmap = Depends(get_owned_roadmap)):
 
 
 @router.get("/{roadmap_id}/progress", response_model=Progress)
-def roadmap_progress(roadmap: Roadmap = Depends(get_owned_roadmap)):
+def roadmap_progress(
+    roadmap: Roadmap = Depends(get_owned_roadmap),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     total = len(roadmap.nodes)
     completed = sum(1 for n in roadmap.nodes if n.completed)
     return Progress(

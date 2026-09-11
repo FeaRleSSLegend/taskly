@@ -12,6 +12,7 @@ dependencies = [
     "email-validator>=2.3.0",
     "fastapi>=0.141.1",
     "groq>=1.7.0",
+    "psycopg2>=2.9.13",
     "psycopg2-binary>=2.9.12",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
